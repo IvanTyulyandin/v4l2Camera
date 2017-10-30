@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include "videodevice.h"
-#include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 
@@ -105,9 +104,62 @@ void getG_Histogram()
     assert(sum == PIC_HEIGHT * PIC_WIDTH);
 }
 
+int thresholdMethodOtsu()
+{
+    /*
+        taken from this site
+        http://www.labbookpages.co.uk/software/imgProc/otsuThreshold.html
+    */
+    int totalPixels = PIC_HEIGHT * PIC_WIDTH;
 
+    float sumMean = 0;
+    for (int i = 0; i < HIST_SIZE; i ++)
+    {
+        sumMean += i * g_histogram[i];
+    }
 
-int main(int argc,char* argv[]) {
+    int sumBackGr = 0;
+    int weightForeGr = 0;
+    int weightBackGr = 0;
+
+    float varianceMax = 0;
+    float varianceBetweenClasses = 0; // variance between current classes
+    int threshold = 0;
+
+    float meanBackGr = 0.0;
+    float meanForeGr = 0.0;
+
+    for (int i = 0; i < HIST_SIZE; i ++)
+    {
+        weightBackGr += g_histogram[i];
+        weightForeGr = totalPixels - weightBackGr;
+
+        if (weightBackGr == 0) continue;
+        if (weightForeGr == 0) break;
+        // don't want catch floating point exception
+
+        sumBackGr += i * g_histogram[i];
+        /*
+            can't be more then PIC_HEIGHT * PIC_WIDTH * HIST_SIZE,
+            assume it's less then max int value
+        */
+
+        meanBackGr = (float) (sumBackGr / weightBackGr);
+        meanForeGr = (float) ((sumMean - sumBackGr) / weightForeGr);
+
+        varianceBetweenClasses = (float)weightBackGr * (float)weightForeGr * (meanBackGr - meanForeGr) * (meanBackGr - meanForeGr);
+
+        if (varianceBetweenClasses > varianceMax)
+        {
+            threshold = i;
+            varianceMax = varianceBetweenClasses;
+        }
+    }
+
+    return threshold;
+}
+
+int main(int argc, char* argv[]) {
     string dev_name = "/dev/video0";
 
     string file_name = "pic.yuv";
@@ -134,6 +186,10 @@ int main(int argc,char* argv[]) {
     getG_Histogram();
 
     printG_Histogram();
+
+    int bestThreshold = thresholdMethodOtsu();
+    cout << endl << bestThreshold << endl;
+
     return 0;
 }
 
