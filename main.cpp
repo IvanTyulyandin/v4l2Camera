@@ -8,9 +8,18 @@ const int FILE_READ_ERROR = 1;
 const int PIC_WIDTH = 640;
 const int PIC_HEIGHT = 480;
 const int HIST_SIZE = 16;
-//pic.yuv - output file
+const int BLACK = 0;
+const int WHITE = 255;
+const string INPUT_FILE = "pic.yuv";
+const string INPUT_DEV = "/dev/video0";
+const string OUTPUT_FILE = "binPic.yuv";
+/*
+    pic.yuv - file with getted frame from /dev/video0
+    binPic.yuv - pic.yuv in greyscale
+*/
 
-using namespace std;
+
+//using namespace std;
 
 //----------------------GLOBAL VARS--------------------------
 unsigned char** g_intensities = new unsigned char* [PIC_HEIGHT];
@@ -18,11 +27,6 @@ unsigned char** g_intensities = new unsigned char* [PIC_HEIGHT];
     need to be inited, doing it in takeGreyScaleFromYUYV
 */
 
-ifstream g_pic;
-/*
-    using this ifstream to get info from pic.yuv
-    and put that info in g_intensities
-*/
 
 unsigned int g_histogram[HIST_SIZE];
 
@@ -34,26 +38,32 @@ void printG_Intensities()
     {
         for (int j = 0; j < PIC_WIDTH; j ++)
         {
-            cout << hex << (unsigned int)g_intensities[i][j] << " ";
+            std::cout << hex << (unsigned int)g_intensities[i][j] << " ";
         }
-        cout << endl;
+        std::cout << std::endl;
     }
 
-    cout << endl << dec << "width " << PIC_WIDTH << " : height " << PIC_HEIGHT << endl;
+    std::cout << std::endl << std::dec << "width " << PIC_WIDTH << " : height " << PIC_HEIGHT << std::endl;
 }
 
 void printG_Histogram()
 {
     for (int i = 0; i < HIST_SIZE; i ++)
     {
-        cout << g_histogram[i] << " ";
+        std::cout << g_histogram[i] << " ";
     }
+    std::cout << std::endl;
 }
 
-void takeGreyScaleFromYUYV()
+void takeGreyScaleFromYUYV(string inputFile)
 {
-    g_pic.open("pic.yuv", ios::binary | ios::in | ios::out);
-    if ( (g_pic.rdstate() & std::ifstream::failbit ) != 0 )
+    ifstream fromPic;
+    /*
+        using this ifstream to get info from pic.yuv
+        and put that info in g_intensities
+    */
+    fromPic.open(inputFile.c_str(), ios::binary | ios::in);
+    if ( (fromPic.rdstate() & std::ifstream::failbit ) != 0 )
     {
         std::cerr << "Error opening file"  << '\n';
         exit(FILE_READ_ERROR);
@@ -69,12 +79,12 @@ void takeGreyScaleFromYUYV()
 
         for (int j = 0; j < PIC_WIDTH; j ++)
         {
-            g_intensities[i][j] = g_pic.get();
-            tmp = g_pic.get(); // skip color byte;
+            g_intensities[i][j] = fromPic.get();
+            tmp = fromPic.get(); // skip color byte;
         }
     }
 
-    g_pic.close();
+    fromPic.close();
 }
 
 void getG_Histogram()
@@ -159,10 +169,51 @@ int thresholdMethodOtsu()
     return threshold;
 }
 
-int main(int argc, char* argv[]) {
-    string dev_name = "/dev/video0";
+void thresholdG_Intensities(int threshold)
+{
+    for (int i = 0; i < PIC_HEIGHT; i ++)
+    {
+        for (int j = 0; j < PIC_WIDTH; j ++)
+        {
+            if (g_intensities[i][j] / HIST_SIZE < threshold)
+            {
+                g_intensities[i][j] = BLACK;
+            }
+            else
+            {
+                g_intensities[i][j] = WHITE;
+            }
+        }
+    }
+}
 
-    string file_name = "pic.yuv";
+void putInfoToOutputFile()
+{
+    ofstream toOutputFile;
+
+    toOutputFile.open(OUTPUT_FILE.c_str(), ios::binary | ios::out);
+    if ( (toOutputFile.rdstate() & std::ifstream::failbit ) != 0 )
+        std::cerr << "Error opening file " << toOutputFile << " to write info !\n";
+
+    toOutputFile.seekp(0, ios::beg);
+    for (int i = 0; i < PIC_HEIGHT; i ++)
+    {
+        for (int j = 0; j < PIC_WIDTH; j ++)
+        {
+            toOutputFile.put((int)g_intensities[i][j]);
+            toOutputFile.put('\0');
+        }
+    }
+
+    toOutputFile.close();
+}
+
+
+int main(int argc, char* argv[]) {
+
+    string dev_name = INPUT_DEV;
+
+    string file_name = INPUT_FILE;
 
     if (argc > 1) {
         dev_name = argv[1];
@@ -181,14 +232,15 @@ int main(int argc, char* argv[]) {
 
     vd -> closeDevice();
 
-    takeGreyScaleFromYUYV();
+    takeGreyScaleFromYUYV(file_name);
 
     getG_Histogram();
 
     printG_Histogram();
 
     int bestThreshold = thresholdMethodOtsu();
-    cout << endl << bestThreshold << endl;
+
+    thresholdG_Intensities(bestThreshold);
 
     return 0;
 }
